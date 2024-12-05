@@ -1,0 +1,70 @@
+name: CI/CD with Advanced Features # Nombre del flujo de trabajo, se mostrará en la interfaz de GitHub Actions
+
+on:
+  push: # Disparador para ejecutar el flujo cuando hay un push a la rama 'main'
+    branches:
+      - main
+  pull_request: # Disparador para ejecutar el flujo cuando se abre o actualiza un Pull Request hacia 'main'
+    branches:
+      - main
+  workflow_dispatch: # Permite que el flujo sea ejecutado manualmente desde la interfaz de GitHub Actions
+
+jobs:
+  build: # Definición del job 'build', encargado de compilar y realizar pruebas
+    runs-on: ubuntu-latest # Especifica el entorno en el que se ejecutará este job (Ubuntu más reciente)
+
+    steps: # Lista de pasos que se ejecutarán en este job
+      - name: Checkout repository # Paso 1: Clonar el repositorio
+        uses: actions/checkout@v3 # Usa la acción oficial de GitHub para clonar el repositorio
+
+      - name: Setup Node.js # Paso 2: Configurar Node.js
+        uses: actions/setup-node@v3 # Usa la acción oficial para instalar Node.js
+        with:
+          node-version: '16' # Versión de Node.js que se instalará
+
+      - name: Install dependencies # Paso 3: Instalar dependencias
+       -name: npm install react 
+        run: npm install # Ejecuta el comando para instalar dependencias definidas en package.json
+
+      - name: Lint code # Paso 4: Analizar el código con herramientas como ESLint para asegurar calidad
+        run: npm run lint # Ejecuta el script de lint definido en package.json
+
+      - name: Run tests with coverage # Paso 5: Ejecutar pruebas y generar reporte de cobertura
+        run: npm test -- --coverage # Ejecuta las pruebas y produce un reporte de cobertura en formato lcov
+
+      - name: Upload coverage to Codecov # Paso 6: Subir el reporte de cobertura a Codecov
+        uses: codecov/codecov-action@v3 # Usa la acción oficial de Codecov
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }} # Token de autenticación almacenado como secreto en el repositorio
+          files: ./coverage/lcov.info # Ubicación del archivo de cobertura generado por Jest
+
+      - name: Upload build artifacts # Paso 7: Subir artefactos generados (opcional, para compartir o referenciar resultados)
+        uses: actions/upload-artifact@v3 # Usa la acción para subir artefactos
+        with:
+          name: build-output # Nombre del artefacto
+          path: ./build # Ruta del directorio a subir
+
+  deploy: # Definición del job 'deploy', que depende del job 'build'
+    needs: build # Este job se ejecutará solo si el job 'build' finaliza con éxito
+    runs-on: ubuntu-latest # Entorno en el que se ejecutará este job
+
+    steps: # Lista de pasos para el despliegue
+      - name: Deploy to Netlify # Paso 1: Desplegar el proyecto a Netlify
+        uses: nwtgck/actions-netlify@v1 # Usa una acción para interactuar con Netlify
+        with:
+          publish-dir: ./build # Directorio que será publicado
+          production-deploy: true # Realiza un despliegue en producción
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }} # Token de autenticación para Netlify
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }} # ID del sitio de Netlify
+
+  notify: # Definición del job 'notify', que depende de 'build' y 'deploy'
+    needs: [build, deploy] # Este job se ejecutará solo si los jobs 'build' y 'deploy' son exitosos
+    runs-on: ubuntu-latest # Entorno en el que se ejecutará este job
+
+    steps: # Lista de pasos para las notificaciones
+      - name: Send Slack Notification # Paso 1: Enviar una notificación a Slack
+        uses: slackapi/slack-github-action@v1.23.0 # Usa la acción oficial de Slack
+        with:
+          slack-token: ${{ secrets.SLACK_TOKEN }} # Token de autenticación para Slack
+          channel-id: C01XXXXXX # ID del canal donde se enviará la notificación
+          text: "CI/CD Pipeline completed successfully!" # Mensaje que se enviará al canal de Slack
